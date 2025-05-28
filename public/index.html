@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contoso Chatbot</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://aka.ms/csspeech/jsbrowserpackageraw"></script>
+</head>
+<body>
+  <div class="header">
+    <img src="gov-ai-logo.png" alt="Contoso Gov" class="logo" />
+    <h1>State/Agency Website</h1>
+  </div>
+  <div class="chatbot-popup" id="chatbotPopup">
+    <div class="chatbot-header">
+      <button id="chatbotReset" title="Clear Chat">
+        <img src="clear-chatbot.png" alt="Clear Chat"  class="clear-chat-icon"/>
+      </button>
+      <span class="chatbot-title">Hi! I'm Jeffe.</span>
+      <button id="callCenterBtn" title="Connect to Call Center">
+        <img src="callcenter.png" alt="Connect to Call Center" class="call-icon" />
+      </button>
+    </div>
+    <div class="chatbot-body" id="chatbotBody">
+      <img src="Jeffe-avatar.png" class="avatar" alt="Jeffe avatar" />
+    </div>
+    <div class="chatbot-footer">
+      <button id="chatbotMic"><img src="mic.png" alt="Mic" title="Speak" /></button>
+      <input type="text" id="chatbotInput" placeholder="Type a message..." />
+      <button id="sendMsg"><img src="send-message.png" alt="Send" title="Send" /></button>
+    </div>
+  </div>
+  <button class="chatbot-toggle" id="chatbotToggleBtn">
+    <img src="lets-chat-logo.jpg" alt="Chatbot Icon" />
+  </button>
+  <script src="script.js"></script>
+</body>
+</html>
