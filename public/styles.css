@@ -6,7 +6,7 @@ body {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  background-color: #f0f0f0;
+  background-color: #ffffff;
 }
 
 .chatbot-popup {
@@ -228,5 +228,3 @@ body {
   width: 300px; /* Adjust size as needed */
   margin-bottom: 10px;
 }
-
-
