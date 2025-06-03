@@ -1,26 +1,47 @@
 // public/script.js
 
-let chatHistory = JSON.parse(localStorage.getItem("chatHistory") || "[]");
+// Always start with a fresh chatHistory on page load
+localStorage.removeItem("chatHistory");
+let chatHistory = [];
+
 let isListening = false;
 let recognizer;
 let fallbackMessage = "";
 
 // 1) Hide mic if speech disabled
 fetch("/speech-enabled")
-  .then(res => {
+  .then((res) => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   })
-  .then(data => {
+  .then((data) => {
     if (!data.enabled) {
       document.getElementById("chatbotMic").style.display = "none";
     }
   })
-  .catch(err => console.warn("Speech setting check failed:", err));
+  .catch((err) => console.warn("Speech setting check failed:", err));
 
 // 2) Core UI functions
 function handleKeyPress(e) {
   if (e.key === "Enter") sendUserMessage();
+}
+
+function appendMessageToLog(msgObj) {
+  // msgObj = { role: "user"|"assistant", content: "…" }
+  const body = document.getElementById("chatbotBody");
+  const el = document.createElement("div");
+  el.className = `message ${msgObj.role === "user" ? "user" : "bot"}`;
+  el.innerHTML = msgObj.content;
+  body.appendChild(el);
+  body.scrollTop = body.scrollHeight;
+}
+
+function renderHistory() {
+  const body = document.getElementById("chatbotBody");
+  body.innerHTML = "";
+  for (const msg of chatHistory) {
+    appendMessageToLog(msg);
+  }
 }
 
 function toggleChatbot() {
@@ -30,12 +51,27 @@ function toggleChatbot() {
 
   if (show) {
     if (!localStorage.getItem("chatbotShownBefore")) {
-      addMessage("bot", "🖐️ Hi! I’m Jeffe, your AI-enabled assistant—how can I help?");
+      addMessage("bot", "🖐️ Hi! I’m PopChat, your AI-enabled assistant—how can I help?");
       localStorage.setItem("chatbotShownBefore", "true");
     } else {
-      clearChat();
-      addMessage("bot", "🖐️ Hello again! How can I help?");
+      // If there is existing chatHistory, re-render it; otherwise show greeting
+      if (chatHistory.length > 0) {
+        renderHistory();
+      } else {
+        const greeting = "🖐️ Hello again! How can I help?";
+        // Only add it if no identical assistant message is already in chatHistory
+        const exists = chatHistory.some(
+          msg => msg.role === "assistant" && msg.content === greeting
+        );
+        if (!exists) {
+          addMessage("bot", greeting);
+          // Also push into history so it won’t get re-added on the next toggle
+          chatHistory.push({ role: "assistant", content: greeting });
+          localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+        }
+      }
     }
+    document.getElementById("chatbotInput").focus();
   }
 }
 
@@ -44,41 +80,57 @@ async function sendUserMessage() {
   const text = input.value.trim();
   if (!text) return;
 
-  addMessage("user", text);
-  chatHistory.push({ role: "user", content: text });
+  // 1) Append user message to UI + history
+  const userMsg = { role: "user", content: text };
+  appendMessageToLog(userMsg);
+  chatHistory.push(userMsg);
   input.value = "";
   localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
 
+  // 2) Disable input while waiting
+  input.disabled = true;
+  document.getElementById("sendMsg").disabled = true;
+
   try {
+    // 3) Call /chat with full history
     const resp = await fetch("/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: text, history: chatHistory })
-    }).then(r => r.json());
+      body: JSON.stringify({ message: text, history: chatHistory }),
+    }).then((r) => r.json());
 
     if (resp.error) {
       addMessage("bot", resp.reply, text);
       return;
     }
 
-    const isFallback = resp.reply.trim() === fallbackMessage;
+    // 4) Build the assistant’s HTML plus citations if any
     let html = resp.reply;
-    if (!isFallback && resp.citations.length) {
-      html += "<br/><br/><ul class='citations'>" +
-        resp.citations.map(c=>`<li>${c}</li>`).join("") +
+    if (Array.isArray(resp.citations) && resp.citations.length > 0) {
+      html +=
+        "<br/><br/><ul class='citations'>" +
+        resp.citations.map((c) => `<li>${c}</li>`).join("") +
         "</ul>";
     }
 
+    // 5) Append assistant reply to UI & then push to history
     addMessage("bot", html);
-    chatHistory.push(resp.assistantMessage);
+    const assistantMsg = { role: "assistant", content: html };
+    chatHistory.push(assistantMsg);
     localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
   } catch (err) {
     console.error(err);
     addMessage("bot", "⚠️ Something went wrong. Please try again.");
+  } finally {
+    // 6) Re-enable input
+    document.getElementById("chatbotInput").disabled = false;
+    document.getElementById("sendMsg").disabled = false;
+    document.getElementById("chatbotInput").focus();
   }
 }
 
 function addMessage(sender, msg, retryText = null) {
+  // sender = "user" or "bot"
   const body = document.getElementById("chatbotBody");
   const el = document.createElement("div");
   el.className = `message ${sender}`;
@@ -88,7 +140,7 @@ function addMessage(sender, msg, retryText = null) {
     const btn = document.createElement("button");
     btn.textContent = "🔁 Retry";
     btn.onclick = () => {
-      input.value = retryText;
+      document.getElementById("chatbotInput").value = retryText;
       sendUserMessage();
     };
     el.appendChild(btn);
@@ -106,10 +158,11 @@ function clearChat(welcome = false) {
   if (welcome) addMessage("bot", "🖐️ Hello again! How can I help?");
 }
 
-// 3) Speech-to-text
+// 3) Speech‐to‐text
 function updateListeningIndicator(active) {
-  document.getElementById("chatbotInput")
-    .placeholder = active ? "🎙️ Listening..." : "Type a message...";
+  document.getElementById("chatbotInput").placeholder = active
+    ? "🎙️ Listening..."
+    : "Type a message...";
 }
 
 async function startSpeechRecognition() {
@@ -117,10 +170,10 @@ async function startSpeechRecognition() {
   mic.classList.add("active");
 
   try {
-    const { token, region } = await fetch("/speech-token").then(r=>r.json());
+    const { token, region } = await fetch("/speech-token").then((r) => r.json());
     const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
     speechConfig.speechRecognitionLanguage = "en-US";
-    const recognizer = new SpeechSDK.SpeechRecognizer(
+    const recognizerLocal = new SpeechSDK.SpeechRecognizer(
       speechConfig,
       SpeechSDK.AudioConfig.fromDefaultMicrophoneInput()
     );
@@ -128,7 +181,7 @@ async function startSpeechRecognition() {
     isListening = true;
     updateListeningIndicator(true);
 
-    recognizer.recognizeOnceAsync(result => {
+    recognizerLocal.recognizeOnceAsync((result) => {
       mic.classList.remove("active");
       isListening = false;
       updateListeningIndicator(false);
@@ -139,7 +192,7 @@ async function startSpeechRecognition() {
       } else {
         alert("Speech not recognized. Try again.");
       }
-      recognizer.close();
+      recognizerLocal.close();
     });
   } catch (err) {
     console.error("Speech recognition error:", err);
@@ -152,27 +205,22 @@ async function startSpeechRecognition() {
 // 4) Wire up events **after** DOM is ready
 window.addEventListener("DOMContentLoaded", () => {
   fetch("/config")
-    .then(r=>r.json())
-    .then(cfg=> fallbackMessage = cfg.fallbackMessage || "")
-    .catch(()=>{});
+    .then((r) => r.json())
+    .then((cfg) => (fallbackMessage = cfg.fallbackMessage || ""))
+    .catch(() => {});
 
-  document.getElementById("chatbotMic")
-    .addEventListener("click", () => {
-      if (isListening) {
-        recognizer.stopJeffenuousRecognitionAsync();
-      } else {
-        startSpeechRecognition();
-      }
-    });
-  document.getElementById("sendMsg")
-    .addEventListener("click", sendUserMessage);
-  document.getElementById("chatbotReset")
-    .addEventListener("click", () => clearChat(true));
-  document.getElementById("chatbotInput")
-    .addEventListener("keypress", handleKeyPress);
-    document.getElementById("callCenterBtn").addEventListener("click", () => {
-      alert("📞 Connecting you to a call center representative... (placeholder)");
-    });
-  document.getElementById("chatbotToggleBtn")
-    .addEventListener("click", toggleChatbot);
+  document.getElementById("chatbotMic").addEventListener("click", () => {
+    if (isListening) {
+      recognizer.stopContinuousRecognitionAsync();
+    } else {
+      startSpeechRecognition();
+    }
+  });
+  document.getElementById("sendMsg").addEventListener("click", sendUserMessage);
+  document.getElementById("chatbotReset").addEventListener("click", () => clearChat(true));
+  document.getElementById("chatbotInput").addEventListener("keypress", handleKeyPress);
+  document.getElementById("callCenterBtn").addEventListener("click", () => {
+    alert("📞 Connecting you to a call center representative... (placeholder)");
+  });
+  document.getElementById("chatbotToggleBtn").addEventListener("click", toggleChatbot);
 });
