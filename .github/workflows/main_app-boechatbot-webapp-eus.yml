@@ -55,4 +55,4 @@ jobs:
           app-name: 'app-boechatbot-webapp-eus'
           slot-name: 'Production'
           package: .
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_722F05B1F0FC47F0AB16E97620BB8DF9 }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_0E8E50EA28544050BB9CE26BB7C01F91 }}
